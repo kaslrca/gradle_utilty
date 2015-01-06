@@ -1,0 +1,80 @@
+class Remote {
+    final Project project
+    
+    Remote(Project project){
+        this.project = project
+    }
+    
+    def createSshTask(String settingName) {
+        def name = settingName - 'Tasks'
+        project.ext[settingName].each { taskName, taskInfo ->
+            def action = {
+                taskInfo.eachWithIndex { info, idx ->
+                    def remoteUser = info.remoteUser
+                    def remotePassword = info.remotePassword
+                    def remoteHost = info.remoteHost
+                    def failonerror = info.failonerror
+                    def command = info.command
+                    doLast {
+                        def commdIdx = idx + 1
+                        ant.sshexec(host: remoteHost,
+                                    failonerror: failonerror,
+                                    verbose: 'true',
+                                    username: remoteUser,
+                                    password: remotePassword,
+                                    trust:'true',
+                                    command: command,
+                                    outputproperty: "sshResult-${remoteHost}-${taskName}-command${commdIdx}")
+                        println "${remoteHost}-${taskName}-command${commdIdx} - " + ant.project.properties."sshResult-${remoteHost}-${taskName}-command${commdIdx}"
+                    }
+                }
+            }
+            
+            def sshTask = project.tasks.create name:"${name}-${taskName}", group:"${name}"
+            sshTask.configure action
+        }
+    }
+    
+    def createUploadTask (String settingName) {
+        def name = settingName - 'Tasks'
+        project.ext[settingName].each { taskName, taskInfo ->
+            def action = {
+                taskInfo.each {
+                    def remoteUser = it.remoteUser
+                    def remotePassword = it.remotePassword
+                    def remoteHost = it.remoteHost
+                    
+                    it.fileSets.each {
+                        def remoteDestination = it.remoteDestination
+                        def fileSet = it.fileSet
+                        doLast {
+                            ant.scp(todir: "${remoteUser}@${remoteHost}:${remoteDestination}",
+                                    password: "${remotePassword}",
+                                    trust:'true',
+                                    failonerror:'true'){ ant.fileset(dir: "${fileSet}"){ include(name:'**/**')}}
+                            println "[${taskName} - ${remoteHost}] upload ${fileSet}"
+                        }
+                    }
+                    
+                    it.files.each {
+                        def remoteDestination = it.remoteDestination
+                        def file = it.file
+                        doLast {
+                            ant.scp(file: "${file}",
+                                    todir: "${remoteUser}@${remoteHost}:${remoteDestination}",
+                                    password: "${remotePassword}",
+                                    trust:'true',
+                                    failonerror:'true')
+                            println "[${taskName} - ${remoteHost}] upload ${file}"
+                        }
+                    }
+                }
+            }
+            
+            def uploadTask = project.tasks.create name:"${name}-${taskName}", group:"${name}"
+            uploadTask.configure action
+        }
+    }
+}
+
+project.extensions.create('Remote', Remote, project)
