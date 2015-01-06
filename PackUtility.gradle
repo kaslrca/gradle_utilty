@@ -1,0 +1,52 @@
+class PackUtility {
+    final Project project
+    
+    PackUtility(Project project) {
+        this.project = project
+    }
+    
+    def createJarTask(String settingName) {
+        def name = settingName - 'Tasks'
+        project.ext[settingName].each { taskName, taskInfo ->
+            def action = {
+                baseName taskInfo.baseName
+                extension 'jar'
+                destinationDir = project.file("${project.ext.distDir}/${taskInfo.distFolder}")
+            
+                from project.files(project.sourceSets.main.output.classesDir)
+                from taskInfo.resource
+                
+                manifest {
+                    attributes "Main-Class": taskInfo.mainClass
+                    attributes "Class-Path": project.ext.jarClassPath
+                }
+                
+                rename 'cmdApplicationContextNoCache\\.xml', 'cmdApplicationContext.xml'
+                
+                if(taskInfo.staticFiles){
+                    doLast {
+                        project.copy {
+                            from taskInfo.staticFiles
+                            into project.file("${project.ext.distDir}/${taskInfo.distFolder}")
+                            
+                            println "\tcopy [${taskInfo.staticFiles.collect{it.name}.join(', ')}] to ${project.ext.distDir}/${taskInfo.distFolder}"
+                        }
+                    }
+                }
+                
+                doLast {
+                    println "[${taskName}] done."
+                    println ""
+                }
+                
+                doFirst {
+                    println "[${taskName}]"
+                }
+            }
+            
+            def packTask = project.tasks.create name:"${name}-${taskName}", group:"${name}", type:Jar
+            packTask.configure action
+        }
+    }
+}
+project.extensions.create('PackUtility', PackUtility, project)
